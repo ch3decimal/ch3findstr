@@ -6,7 +6,8 @@ It has many options to configurate the search process and may work multithreaded
 Note: i have **NOT** tested it on any linux-based OS and any fs other than fat32 yet. I've
 implemented some precautions for that manner, but at this point of time I am not sure if this 
 script will work fine on linux.
-=======
+
+---
 
 ## Usage
 ```
@@ -15,7 +16,6 @@ usage: ch3findstr.py [-h] -p PATH (-r REGEX | -s STRING | -b BINARY) [-v]
                          [--thread-count THREAD_COUNT]
                          [--log-filename LOG_FILENAME]
                          [--check-filename [{name,name_contents}]]
->>>>>>> refs/remotes/origin/main
 
 ## Usage
 ```usage: ch3findstr.py [-h] -p PATH (-r REGEX | -s STRING | -b BINARY) [-v] [-k KNOWN_EXTENSIONS] [--follow-links] [--thread-count THREAD_COUNT]
