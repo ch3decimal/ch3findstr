@@ -3,6 +3,10 @@ This script looks for whole string/binary/regex matches inside any files that it
 inside given directory and any of its subdirectories.
 It has many options to configurate the search process and may work multithreaded.
 
+Note: i have **NOT** tested it on any linux-based OS and any fs other than fat32 yet. I've
+implemented some precautions for that manner, but at this point of time I am not sure if this 
+script will work fine on linux.
+
 ## Usage
 ```
 usage: ch3findstr.py [-h] -p PATH (-r REGEX | -s STRING | -b BINARY) [-v]
