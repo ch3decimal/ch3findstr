@@ -36,6 +36,7 @@ parser.add_argument("--check-filename",
 		help="If you use -s or -r, then enabling this argument makes the script look at the filename as " +\
 			"well and match your string with it. \"name\" will flag the file as matching even if at least name fits. \"name_contents\" will only match file if both name check and contents check pass",
 		required=False, default=None, nargs="?", choices=["name", "name_contents"], action="store", type=str)
+parser.add_argument("--include-errors", help="Log about unreadable, unaccessible and locked files in the log as well", required=False, default=False, action="store_true")
 args = parser.parse_args(sys.argv[1:])
 print(args.check_filename)
 
@@ -56,19 +57,42 @@ else:
 	DIR_QUEUE.put(args.path)
 
 # logging.basicConfig(format='[%(levelname)s] %(message)s', level=logging.DEBUG if args.verbose else logging.INFO, **({"filename": args.log_filename} if args.log_filename else {}))
-logger = logging.getLogger('ch3findstr')
+logger_ = logging.getLogger('ch3findstr')
 logger_level = logging.DEBUG if args.verbose else logging.INFO
-logger.setLevel(logger_level)
+logger_.setLevel(logger_level)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 if args.log_filename:
 	file_handler = logging.FileHandler(args.log_filename)
 	file_handler.setLevel(logging.DEBUG)
 	file_handler.setFormatter(formatter)
-	logger.addHandler(file_handler)
+	logger_.addHandler(file_handler)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logger_level)
 console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+logger_.addHandler(console_handler)
+
+# i thought it might be unnecessary to spam the logs with countless error messages in cade starting directory is high enough in the file tree
+# so i added new argument to config that
+# this is my way around for now
+if not args.include_errors:
+	class logger:  # i dont wanna rewrite logger for now, so this would solve the problem
+		@staticmethod
+		def info(*args, **kwargs):
+			logger_.info(*args, **kwargs)
+		
+		@staticmethod
+		def warning(*args, **kwargs):
+			logger_.warning(*args, **kwargs)
+			
+		@staticmethod
+		def debug(*args, **kwargs):
+			logger_.debug(*args, **kwargs)
+			
+		@staticmethod
+		def error(*args, **kwargs):
+			pass
+else:
+	logger = logger_
 
 regex_compiled = None
 bin_data = None
