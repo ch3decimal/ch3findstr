@@ -45,7 +45,8 @@ options:
 Input:
   -r, --regex REGEX     Expression to match inside files. One of: -r, -b or -s must be used
   -s, --string STRING   Whole string to match inside files. One of: -r, -b or -s must be used
-  -b, --binary BINARY   Look for whole binary strings inside files. Format it as hexadecimal, ex.: "ab030343fa". One of: -r, -b or -s must be used```
+  -b, --binary BINARY   Look for whole binary strings inside files. Format it as hexadecimal, ex.: "ab030343fa". One of: -r, -b or -s must be used
+```
 
 ## TODO
  - [ ] Test on ext4 fs
