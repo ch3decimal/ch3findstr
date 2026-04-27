@@ -183,7 +183,12 @@ def worker(tnum: int) -> None:
 				continue
 		
 		for fl in fls:
-			fl_justname = os.path.split(fl)[-1]
+			fl_justname = os.path.split(fl)
+			if not fl_justname[1]:
+				fl_justname = fl_justname[0]
+			else:
+				fl_justname = fl_justname[1]
+			logger.debug(f"Processing {fl}, fl_justname: {fl_justname}")
 			if args.check_filename:
 				match = None
 				if args.regex:
@@ -192,16 +197,17 @@ def worker(tnum: int) -> None:
 						logger.info(f"Found regex match in file's name: \"{fl}\"")
 				elif args.string:
 					match = fl_justname.find(args.string)
-					if match:
+					if match >= 0:
 						logger.info(f"Found whole string match in file's name: \"{fl}\"")
+					else:
+						match = None  # cuz it's -1
 					
 				if match and args.check_filename == "name":
 					continue
 					
 			
 			try:
-				logger.debug(f"Processing {fl}")
-				with open(fl, "rb" if args.binary else "r", **({encoding: "utf=8"} if args.string else {})) as fhandler_:
+				with open(fl, "rb" if args.binary else "r", **({"encoding": "utf-8"} if args.string else {})) as fhandler_:
 					try:
 						d = fhandler_.read()
 					except (UnicodeDecodeError, IOError, OSError) as ex:
