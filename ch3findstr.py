@@ -10,11 +10,12 @@ import time
 import re
 import select
 import logging
+import signal
 
 STATUS = True  # all workers run while this is true
 DIR_QUEUE = queue.Queue()  # all found dirs end up here for workers
-LOGS = queue.Queue()  # unused for now, because i've only ran it with 1 thread yet, but i guess there'll be problems with multithreaded logging
-# probably will make a separate thread just to collect and post logs
+
+IS_WINDOWS = sys.platform.startswith("win")
 
 # Argument parser, gotta make it a separate script or at least wrap it up better
 parser = argparse.ArgumentParser(prog="ch3findstr.py",
@@ -37,8 +38,8 @@ parser.add_argument("--check-filename",
 			"well and match your string with it. \"name\" will flag the file as matching even if at least name fits. \"name_contents\" will only match file if both name check and contents check pass",
 		required=False, default=None, nargs="?", choices=["name", "name_contents"], action="store", type=str)
 parser.add_argument("--include-errors", help="Log about unreadable, unaccessible and locked files in the log as well", required=False, default=False, action="store_true")
+parser.add_argument("--non-interactive", help="Only stop for SIGTERM and keyboard interruptions, script won't wait for input", required=False, default=False, action="store_true")
 args = parser.parse_args(sys.argv[1:])
-print(args.check_filename)
 
 if args.thread_count.__class__ != int:
 	parser.error("--thread-count must be a positive integer")
@@ -71,11 +72,8 @@ console_handler.setLevel(logger_level)
 console_handler.setFormatter(formatter)
 logger_.addHandler(console_handler)
 
-# i thought it might be unnecessary to spam the logs with countless error messages in cade starting directory is high enough in the file tree
-# so i added new argument to config that
-# this is my way around for now
 if not args.include_errors:
-	class logger:  # i dont wanna rewrite logger for now, so this would solve the problem
+	class logger:
 		@staticmethod
 		def info(*args, **kwargs):
 			logger_.info(*args, **kwargs)
@@ -129,6 +127,18 @@ if args.binary:
 		sys.exit(1)
 		
 thread_waitingfornewdirectories: dict[int, bool] = {}
+thread_exitted: dict[int, book] = {}
+
+
+def wait_for_input():
+	with open(0) as stdin:
+		try:
+			rl = select.select([stdin,], [], [], timeout=0.1)
+			if rl and rl.read():
+				return True
+			return False
+		except:
+			return False
 
 
 def worker(tnum: int) -> None:
@@ -148,16 +158,20 @@ def worker(tnum: int) -> None:
 			continue
 			
 		if not os.access(dir_path, os.R_OK | os.F_OK):
-			logger.warning(f"Directory \"{dir_path}\" is not accessible, skipping it")
+			logger.error(f"Directory \"{dir_path}\" is not accessible, skipping it")
 			continue
 		
-		contents = os.listdir(dir_path)
+		try:
+			contents = os.listdir(dir_path)
+		except (OSError, PermissionError):
+			logger.error(f"Cannot list contents of directory \"{dir_path}\", skipping it")
+			continue
 		fls = list()
 		
 		for i in contents:
 			cpath = os.path.join(dir_path, i)
 			
-			if sys.platform.startswith("win") and os.path.isreserved(cpath):
+			if IS_WINDOWS and os.path.isreserved(cpath):
 				continue
 			if not args.follow_links and os.path.islink(cpath):
 				continue
@@ -188,7 +202,7 @@ def worker(tnum: int) -> None:
 				fl_justname = fl_justname[0]
 			else:
 				fl_justname = fl_justname[1]
-			logger.debug(f"Processing {fl}, fl_justname: {fl_justname}")
+			logger.debug(f"Processing {fl}, filename: {fl_justname}")
 			if args.check_filename:
 				match = None
 				if args.regex:
@@ -214,8 +228,8 @@ def worker(tnum: int) -> None:
 						logger.error(f"Could not read file \"{fl}\". Skipping...")  # If -s mode is on, then probably couldn't decode. If -b, then file is locked or unreadable
 						fhandler_.close()
 						continue
-			except (OSError, IOError) as ex:
-				logger.error(f"Could not read file: \"{fl}\", skipping it")
+			except OSError as ex:
+				logger.error(f"Could not read file: \"{fl}\" because of \"{ex.__str__()}\", skipping it")
 				continue
 			
 			if not d:
@@ -243,30 +257,46 @@ def worker(tnum: int) -> None:
 					logger.info(f"Found whole string match at index {match} in file: \"{fl}\"")
 			else:
 				pass  # idk what else it might be lol so just pass
-	print(f"Thread #{tnum} has stopped working")
+	logger.info(f"Thread #{tnum} has stopped working")
+	thread_exitted[tnum] = True
 
 threads = list()
 for _tnum in range(args.thread_count):
 	threads.append(threading.Thread(target=worker, args=(_tnum,)))
 	threads[-1].start()
+	thread_exitted[_tnum] = False
 print("Press enter or Ctrl-C to stop and wait for all the threads to stop")
-try:
-	while STATUS:
-		with open(0) as stdin:
-			try:
-				rl = select.select([stdin,], [], [], timeout=0.1)
-				if rl:
-					if rl.read():
-						STATUS = False
-						print("Stopping all threads...")
-						stdin.close()
-						break
-			except:
+if args.non_interactive:
+	def exit_normally(sn, frm):
+		global STATUS
+		STATUS = False
+		for t in threads:
+			t.join(timeout=4)
+		logger.info("Stopping all threads")
+		while tuple(set(thread_exitted.values())) != (True, ):
+			time.sleep(0.5)
+	signal.signal(signal.SIGTERM, exit_normally)
+	signal.signal(signal.SIGINT, exit_normally)  # https://stackoverflow.com/a/31464349
+	try:
+		while STATUS:
+			wait_for_input()
+			time.sleep(1)
+	except KeyboardInterrupt:
+		exit_normally(None, None)
+else:
+	try:
+		while STATUS:
+			if wait_for_input():
+				STATUS = False
+				logger.info("Stopping all threads...")
+				stdin.close()
+				break
+			else:
 				time.sleep(0.1)
 				continue
-except BaseException as ex:  # systemexit or keyboardinterrupt called
-	pass
-STATUS = False
-for t in threads:
-	t.join(timeout=4)
-print("Main loop stopped, wait for other threads to finish their work")
+	except KeyboardInterrupt:
+		pass
+	STATUS = False
+	for t in threads:
+		t.join(timeout=4)
+	logger.info("Main loop stopped, wait for other threads to finish their work")
